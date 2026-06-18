@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #333 transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #555;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-surface-50/80 backdrop-blur-md border border-white/5 rounded-xl;
+  }
+
+  .glass-panel {
+    @apply bg-surface-100/90 backdrop-blur-lg border border-white/5 rounded-2xl;
+  }
+
+  .btn-primary {
+    @apply bg-accent hover:bg-accent-light active:bg-accent-dark text-white font-semibold
+           px-6 py-3 rounded-xl transition-all duration-200
+           shadow-glow hover:shadow-glow-lg
+           disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-accent;
+  }
+
+  .btn-ghost {
+    @apply bg-white/5 hover:bg-white/10 active:bg-white/15 text-muted-light font-medium
+           px-4 py-2 rounded-lg transition-all duration-200
+           border border-white/5 hover:border-white/10;
+  }
+
+  .btn-danger {
+    @apply bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 font-medium
+           px-3 py-1.5 rounded-lg transition-all duration-200
+           border border-red-500/20 hover:border-red-500/30;
+  }
+
+  .input-field {
+    @apply bg-surface-300/50 border border-white/10 rounded-lg px-3 py-2
+           text-white text-sm font-mono
+           focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20
+           transition-all duration-200;
+  }
+
+  .slider-accent {
+    @apply w-full h-1.5 rounded-full appearance-none cursor-pointer
+           bg-surface-300;
+  }
+
+  .slider-accent::-webkit-slider-thumb {
+    @apply appearance-none w-4 h-4 rounded-full bg-accent
+           shadow-glow cursor-pointer transition-transform duration-150;
+  }
+
+  .slider-accent::-webkit-slider-thumb:hover {
+    @apply scale-125;
+  }
+
+  .slider-accent::-moz-range-thumb {
+    @apply w-4 h-4 rounded-full bg-accent border-0
+           shadow-glow cursor-pointer;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium
+           bg-white/10 text-muted-light;
+  }
+
+  .badge-accent {
+    @apply inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium
+           bg-accent/15 text-accent-light;
+  }
+
+  .skeleton {
+    @apply bg-gradient-to-r from-surface-100 via-surface-50 to-surface-100
+           bg-[length:200%_100%] animate-shimmer rounded-lg;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-accent via-orange-300 to-accent-light
+           bg-clip-text text-transparent;
+  }
+}
