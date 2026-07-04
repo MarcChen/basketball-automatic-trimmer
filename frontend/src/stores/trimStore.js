@@ -1,30 +1,42 @@
 import { defineStore } from 'pinia'
-import { getVideos, startTrim, getJob, getOutput, deleteClip } from '../api/client'
+import { getVideos, startTrim, getJob, getOutput, deleteClip, getCalibration } from '../api/client'
 
 const PRESETS = {
-  conservative: {
-    activity_threshold: 0.01,
+  tight: {
+    yolo_confidence: 0.4,
+    near_miss_multiplier: 1.3,
+    pre_roll_seconds: 2.0,
+    post_roll_seconds: 1.0,
+    min_segment_duration: 1.0,
+    max_clip_duration: 20.0,
+    include_near_misses: true,
+  },
+  standard: {
+    yolo_confidence: 0.4,
+    near_miss_multiplier: 1.3,
+    pre_roll_seconds: 3.0,
+    post_roll_seconds: 2.0,
     min_segment_duration: 1.5,
-    buffer_seconds: 2.0,
-    min_detection_confidence: 0.5,
-    min_tracking_confidence: 0.5,
-    max_clip_duration: 300,
+    max_clip_duration: 30.0,
+    include_near_misses: true,
   },
-  balanced: {
-    activity_threshold: 0.015,
+  wide: {
+    yolo_confidence: 0.3,
+    near_miss_multiplier: 1.5,
+    pre_roll_seconds: 5.0,
+    post_roll_seconds: 3.0,
     min_segment_duration: 2.0,
-    buffer_seconds: 1.5,
-    min_detection_confidence: 0.5,
-    min_tracking_confidence: 0.5,
-    max_clip_duration: 300,
+    max_clip_duration: 60.0,
+    include_near_misses: true,
   },
-  aggressive: {
-    activity_threshold: 0.03,
-    min_segment_duration: 3.0,
-    buffer_seconds: 1.0,
-    min_detection_confidence: 0.5,
-    min_tracking_confidence: 0.5,
-    max_clip_duration: 300,
+  scores_only: {
+    yolo_confidence: 0.5,
+    near_miss_multiplier: 1.2,
+    pre_roll_seconds: 3.0,
+    post_roll_seconds: 2.0,
+    min_segment_duration: 1.5,
+    max_clip_duration: 30.0,
+    include_near_misses: false,
   },
 }
 
@@ -38,7 +50,8 @@ export const useTrimStore = defineStore('trim', {
     loading: false,
     error: null,
     toasts: [],
-    params: { ...PRESETS.balanced },
+    calibration: null,
+    params: { ...PRESETS.standard },
   }),
 
   getters: {
@@ -55,6 +68,14 @@ export const useTrimStore = defineStore('trim', {
         groups[clip.source_video].push(clip)
       }
       return groups
+    },
+
+    scoreCount: (state) => {
+      return state.outputClips.filter((c) => c.event_type === 'score').length
+    },
+
+    nearMissCount: (state) => {
+      return state.outputClips.filter((c) => c.event_type === 'near_miss').length
     },
   },
 
@@ -75,6 +96,29 @@ export const useTrimStore = defineStore('trim', {
 
     selectVideo(video) {
       this.selectedVideo = video
+      this.calibration = null
+      this.fetchCalibration(video.filename)
+    },
+
+    async fetchCalibration(filename) {
+      try {
+        const { data } = await getCalibration(filename)
+        if (data) {
+          this.calibration = data
+          this.params.hoop_x = data.hoop_x
+          this.params.hoop_y = data.hoop_y
+          this.params.hoop_radius = data.hoop_radius
+        }
+      } catch (err) {
+        this.calibration = null
+      }
+    },
+
+    setCalibration(cal) {
+      this.calibration = cal
+      this.params.hoop_x = cal.hoop_x
+      this.params.hoop_y = cal.hoop_y
+      this.params.hoop_radius = cal.hoop_radius
     },
 
     async startTrim() {
@@ -104,8 +148,11 @@ export const useTrimStore = defineStore('trim', {
 
           if (data.status === 'done') {
             this.stopPolling()
+            const total = data.clips_exported.length
+            const scores = data.scores_found || 0
+            const nearMisses = data.near_misses_found || 0
             this.addToast(
-              `Done! ${data.clips_exported.length} clip${data.clips_exported.length !== 1 ? 's' : ''} extracted`,
+              `Done! ${total} clip${total !== 1 ? 's' : ''} (${scores} scores, ${nearMisses} near-misses)`,
               'success'
             )
             await this.fetchOutput()

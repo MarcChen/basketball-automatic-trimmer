@@ -4,13 +4,14 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from models.schemas import OutputClip, TrimJob, TrimParams, VideoMeta
+from models.schemas import HoopCalibration, OutputClip, TrimJob, TrimParams, VideoMeta
 from services.clip_exporter import export_clips
-from services.pose_detector import analyze_video
+from services.event_detector import analyze_video
+from services.frame_extractor import extract_frame
 from services.video_scanner import scan_videos
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 OUTPUT_DIR = BASE_DIR / "output"
 THUMBNAILS_DIR = BASE_DIR / ".thumbnails"
+FRAMES_DIR = BASE_DIR / ".frames"
 
 app = FastAPI(title="Basketball Video Trimmer")
 
@@ -32,13 +34,14 @@ app.add_middleware(
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 THUMBNAILS_DIR.mkdir(parents=True, exist_ok=True)
+FRAMES_DIR.mkdir(parents=True, exist_ok=True)
 
 jobs: dict[str, TrimJob] = {}
+calibrations: dict[str, HoopCalibration] = {}
 executor = ThreadPoolExecutor(max_workers=2)
 
 
 def _safe_filename(filename: str) -> str:
-    """Sanitise a filename to prevent path-traversal attacks."""
     sanitized = PurePosixPath(filename).name
     if not sanitized or sanitized in (".", ".."):
         raise HTTPException(status_code=400, detail="Invalid filename")
@@ -65,12 +68,45 @@ async def get_thumbnail(filename: str):
 
 @app.get("/videos/stream/{filename}")
 async def stream_video(filename: str):
-    """Serve a video file from data/ for frontend preview."""
     filename = _safe_filename(filename)
     video_path = DATA_DIR / filename
     if not video_path.exists():
         raise HTTPException(status_code=404, detail="Video not found")
     return FileResponse(str(video_path), media_type="video/mp4")
+
+
+@app.get("/frame/{filename}")
+async def get_frame(filename: str, frame_number: int = Query(ge=0)):
+    filename = _safe_filename(filename)
+    video_path = DATA_DIR / filename
+    if not video_path.exists():
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    try:
+        frame_path = extract_frame(str(video_path), frame_number, str(FRAMES_DIR))
+        return FileResponse(frame_path, media_type="image/jpeg")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/calibrate-hoop", response_model=HoopCalibration)
+async def save_hoop_calibration(cal: HoopCalibration):
+    safe_name = _safe_filename(cal.video_filename)
+    video_path = DATA_DIR / safe_name
+    if not video_path.exists():
+        raise HTTPException(status_code=404, detail=f"Video not found: {safe_name}")
+
+    cal.video_filename = safe_name
+    calibrations[safe_name] = cal
+    return cal
+
+
+@app.get("/calibrate-hoop/{video_filename}", response_model=HoopCalibration | None)
+async def get_hoop_calibration(video_filename: str):
+    safe_name = _safe_filename(video_filename)
+    if safe_name not in calibrations:
+        return None
+    return calibrations[safe_name]
 
 
 @app.post("/trim", response_model=TrimJob)
@@ -79,6 +115,13 @@ async def start_trim(params: TrimParams):
     video_path = DATA_DIR / safe_name
     if not video_path.exists():
         raise HTTPException(status_code=404, detail=f"Video not found: {safe_name}")
+
+    if params.hoop_x is None or params.hoop_y is None or params.hoop_radius is None:
+        cal = calibrations.get(safe_name)
+        if cal is not None:
+            params.hoop_x = cal.hoop_x
+            params.hoop_y = cal.hoop_y
+            params.hoop_radius = cal.hoop_radius
 
     job_id = str(uuid.uuid4())
     job = TrimJob(
@@ -106,10 +149,16 @@ def _run_trim_job(job_id: str, video_path: str, params: TrimParams):
         segments = analyze_video(video_path, params, progress_callback)
         job.segments_found = len(segments)
 
+        scores = sum(1 for s in segments if s.event_type == "score")
+        near_misses = sum(1 for s in segments if s.event_type == "near_miss")
+        job.scores_found = scores
+        job.near_misses_found = near_misses
+
         if segments:
+            segment_tuples = [(s.start_time, s.end_time, s.event_type) for s in segments]
             clips = export_clips(
                 video_path,
-                segments,
+                segment_tuples,
                 str(OUTPUT_DIR),
                 params.video_filename,
             )
@@ -140,12 +189,20 @@ async def get_output():
         start_time = 0.0
         end_time = 0.0
         duration = 0.0
+        event_type = "score"
 
         parts = file_path.stem.split("_clip_")
         if len(parts) == 2:
             source_video = parts[0] + ".mp4"
-            time_part = parts[1].split("_", 1)[-1] if "_" in parts[1] else parts[1]
-            time_part = time_part.replace("s", "")
+            remainder = parts[1]
+
+            for et in ("near_miss", "score"):
+                if remainder.startswith(et + "_"):
+                    event_type = et
+                    remainder = remainder[len(et) + 1:]
+                    break
+
+            time_part = remainder.replace("s", "")
             if "-" in time_part:
                 start_str, end_str = time_part.split("-")
                 try:
@@ -163,6 +220,7 @@ async def get_output():
                 end_time=end_time,
                 duration=duration,
                 size_mb=size_mb,
+                event_type=event_type,
                 url=f"/output/{file_path.name}",
             )
         )
@@ -192,6 +250,4 @@ async def delete_output_file(filename: str):
 @app.get("/socket.io/")
 @app.post("/socket.io/")
 async def socket_io_stub():
-    """Silently handle socket.io polling from browser extensions (Vue DevTools, etc.)."""
     return {"error": "socket.io not supported"}
-

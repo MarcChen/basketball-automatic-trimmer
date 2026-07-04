@@ -1,0 +1,40 @@
+# ── Videos & media ──────────────────────────────────
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+*.flv
+
+# ── Data / output directories ──────────────────────
+backend/data/
+backend/output/
+backend/.frames/
+backend/.thumbnails/
+
+# ── Model weights ───────────────────────────────────
+*.pt
+*.onnx
+*.pth
+*.engine
+
+# ── Python ──────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# ── Node / Frontend ────────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+
+# ── OS / Editor ─────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.sw?

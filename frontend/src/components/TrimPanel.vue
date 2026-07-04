@@ -1,6 +1,5 @@
 <template>
   <div id="trim-panel" class="flex flex-col h-full">
-    <!-- Header -->
     <div class="flex items-center gap-2 mb-4">
       <div class="w-8 h-8 rounded-lg bg-accent/15 flex items-center justify-center">
         <svg class="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -11,7 +10,6 @@
     </div>
 
     <div class="flex-1 overflow-y-auto pr-1 space-y-5 min-h-0">
-      <!-- No Selection State -->
       <div
         v-if="!store.selectedVideo"
         class="flex flex-col items-center justify-center py-16 text-center"
@@ -26,7 +24,6 @@
       </div>
 
       <template v-else>
-        <!-- Selected Video Player -->
         <div class="glass-card overflow-hidden">
           <div class="relative aspect-video bg-surface-300">
             <video
@@ -48,10 +45,9 @@
           </div>
         </div>
 
-        <!-- Presets -->
         <div>
           <label class="block text-xs font-medium text-muted-dark uppercase tracking-wider mb-2">Presets</label>
-          <div class="grid grid-cols-3 gap-2">
+          <div class="grid grid-cols-2 gap-2">
             <button
               v-for="preset in presets"
               :key="preset.key"
@@ -66,43 +62,114 @@
           </div>
         </div>
 
-        <!-- Parameters -->
+        <HoopCalibrator
+          :video-filename="store.selectedVideo.filename"
+          @calibrated="onCalibrated"
+        />
+
         <div class="space-y-4">
-          <!-- Activity Threshold -->
           <div>
             <div class="flex items-center justify-between mb-1.5">
-              <label for="activity-threshold" class="text-sm font-medium text-muted-light">Activity Threshold</label>
-              <input
-                id="activity-threshold-input"
-                v-model.number="store.params.activity_threshold"
-                type="number"
-                step="0.001"
-                min="0.001"
-                max="0.5"
-                class="input-field w-20 text-right text-xs"
-                :disabled="store.isJobRunning"
-              />
+              <label for="yolo-confidence" class="text-sm font-medium text-muted-light">Ball Detection Confidence</label>
+              <span class="text-xs font-mono text-muted">{{ store.params.yolo_confidence.toFixed(2) }}</span>
             </div>
             <input
-              id="activity-threshold"
-              v-model.number="store.params.activity_threshold"
+              id="yolo-confidence"
+              v-model.number="store.params.yolo_confidence"
               type="range"
-              min="0.001"
-              max="0.5"
-              step="0.001"
+              min="0.1"
+              max="1.0"
+              step="0.05"
+              class="slider-accent"
+              :disabled="store.isJobRunning"
+            />
+            <p class="text-[11px] text-muted-dark mt-1">Minimum YOLO confidence for basketball detection</p>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label for="near-miss-multiplier" class="text-sm font-medium text-muted-light">Near-Miss Zone</label>
+              <span class="text-xs font-mono text-muted">{{ store.params.near_miss_multiplier.toFixed(1) }}x</span>
+            </div>
+            <input
+              id="near-miss-multiplier"
+              v-model.number="store.params.near_miss_multiplier"
+              type="range"
+              min="1.0"
+              max="3.0"
+              step="0.1"
               class="slider-accent"
               :disabled="store.isJobRunning"
             />
             <p class="text-[11px] text-muted-dark mt-1">
-              How much movement to detect.
-              <span class="text-muted">Low (0.005) = capture all movement · High (0.05) = action plays only</span>
+              Near-miss zone = hoop radius × this value.
+              <span class="text-muted">1.0 = only scores · 2.0 = generous near-miss capture</span>
             </p>
           </div>
 
-          <!-- Min Segment Duration -->
           <div>
             <div class="flex items-center justify-between mb-1.5">
-              <label for="min-segment-duration" class="text-sm font-medium text-muted-light">Min Segment Duration</label>
+              <label for="pre-roll" class="text-sm font-medium text-muted-light">Pre-Roll (lead-up)</label>
+              <div class="flex items-center gap-1">
+                <input
+                  id="pre-roll-input"
+                  v-model.number="store.params.pre_roll_seconds"
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max="15"
+                  class="input-field w-16 text-right text-xs"
+                  :disabled="store.isJobRunning"
+                />
+                <span class="text-xs text-muted-dark">s</span>
+              </div>
+            </div>
+            <input
+              id="pre-roll"
+              v-model.number="store.params.pre_roll_seconds"
+              type="range"
+              min="0"
+              max="15"
+              step="0.5"
+              class="slider-accent"
+              :disabled="store.isJobRunning"
+            />
+            <p class="text-[11px] text-muted-dark mt-1">Context captured before each event (pass, approach, jump)</p>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label for="post-roll" class="text-sm font-medium text-muted-light">Post-Roll (aftermath)</label>
+              <div class="flex items-center gap-1">
+                <input
+                  id="post-roll-input"
+                  v-model.number="store.params.post_roll_seconds"
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max="15"
+                  class="input-field w-16 text-right text-xs"
+                  :disabled="store.isJobRunning"
+                />
+                <span class="text-xs text-muted-dark">s</span>
+              </div>
+            </div>
+            <input
+              id="post-roll"
+              v-model.number="store.params.post_roll_seconds"
+              type="range"
+              min="0"
+              max="15"
+              step="0.5"
+              class="slider-accent"
+              :disabled="store.isJobRunning"
+            />
+            <p class="text-[11px] text-muted-dark mt-1">Context captured after each event (celebration, rebound)</p>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label for="min-segment-duration" class="text-sm font-medium text-muted-light">Min Clip Duration</label>
               <div class="flex items-center gap-1">
                 <input
                   id="min-segment-duration-input"
@@ -130,38 +197,6 @@
             <p class="text-[11px] text-muted-dark mt-1">Clips shorter than this will be discarded</p>
           </div>
 
-          <!-- Buffer Seconds -->
-          <div>
-            <div class="flex items-center justify-between mb-1.5">
-              <label for="buffer-seconds" class="text-sm font-medium text-muted-light">Buffer Seconds</label>
-              <div class="flex items-center gap-1">
-                <input
-                  id="buffer-seconds-input"
-                  v-model.number="store.params.buffer_seconds"
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="10"
-                  class="input-field w-16 text-right text-xs"
-                  :disabled="store.isJobRunning"
-                />
-                <span class="text-xs text-muted-dark">s</span>
-              </div>
-            </div>
-            <input
-              id="buffer-seconds"
-              v-model.number="store.params.buffer_seconds"
-              type="range"
-              min="0"
-              max="10"
-              step="0.5"
-              class="slider-accent"
-              :disabled="store.isJobRunning"
-            />
-            <p class="text-[11px] text-muted-dark mt-1">Extra context added before and after each detected segment</p>
-          </div>
-
-          <!-- Max Clip Duration -->
           <div>
             <div class="flex items-center justify-between mb-1.5">
               <label for="max-clip-duration" class="text-sm font-medium text-muted-light">Max Clip Duration</label>
@@ -170,9 +205,9 @@
                   id="max-clip-duration-input"
                   v-model.number="store.params.max_clip_duration"
                   type="number"
-                  step="10"
-                  min="10"
-                  max="1800"
+                  step="5"
+                  min="5"
+                  max="600"
                   class="input-field w-20 text-right text-xs"
                   :disabled="store.isJobRunning"
                 />
@@ -183,61 +218,37 @@
               id="max-clip-duration"
               v-model.number="store.params.max_clip_duration"
               type="range"
-              min="10"
-              max="1800"
-              step="10"
+              min="5"
+              max="600"
+              step="5"
               class="slider-accent"
               :disabled="store.isJobRunning"
             />
-            <p class="text-[11px] text-muted-dark mt-1">
-              Segments longer than this are split into multiple clips.
-              <span class="text-muted">Default: 5 min (300s)</span>
-            </p>
+            <p class="text-[11px] text-muted-dark mt-1">Segments longer than this are split into multiple clips</p>
           </div>
 
-          <!-- Detection Confidence -->
-          <div>
-            <div class="flex items-center justify-between mb-1.5">
-              <label for="detection-confidence" class="text-sm font-medium text-muted-light">Detection Confidence</label>
-              <span class="text-xs font-mono text-muted">{{ store.params.min_detection_confidence.toFixed(2) }}</span>
+          <div class="flex items-center justify-between py-2">
+            <div>
+              <label for="include-near-misses" class="text-sm font-medium text-muted-light">Include Near-Misses</label>
+              <p class="text-[11px] text-muted-dark mt-0.5">Also clip near-miss attempts, not just scores</p>
             </div>
-            <input
-              id="detection-confidence"
-              v-model.number="store.params.min_detection_confidence"
-              type="range"
-              min="0.1"
-              max="1.0"
-              step="0.05"
-              class="slider-accent"
+            <button
+              id="include-near-misses"
+              class="relative w-10 h-5 rounded-full transition-colors duration-200"
+              :class="store.params.include_near_misses ? 'bg-accent' : 'bg-surface-300'"
               :disabled="store.isJobRunning"
-            />
-            <p class="text-[11px] text-muted-dark mt-1">Minimum confidence for initial pose detection</p>
-          </div>
-
-          <!-- Tracking Confidence -->
-          <div>
-            <div class="flex items-center justify-between mb-1.5">
-              <label for="tracking-confidence" class="text-sm font-medium text-muted-light">Tracking Confidence</label>
-              <span class="text-xs font-mono text-muted">{{ store.params.min_tracking_confidence.toFixed(2) }}</span>
-            </div>
-            <input
-              id="tracking-confidence"
-              v-model.number="store.params.min_tracking_confidence"
-              type="range"
-              min="0.1"
-              max="1.0"
-              step="0.05"
-              class="slider-accent"
-              :disabled="store.isJobRunning"
-            />
-            <p class="text-[11px] text-muted-dark mt-1">Minimum confidence for pose tracking between frames</p>
+              @click="store.params.include_near_misses = !store.params.include_near_misses"
+            >
+              <span
+                class="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200"
+                :class="store.params.include_near_misses ? 'translate-x-5' : 'translate-x-0.5'"
+              />
+            </button>
           </div>
         </div>
 
-        <!-- Job Status -->
         <JobStatus v-if="store.activeJob" :job="store.activeJob" />
 
-        <!-- Start Trim Button -->
         <button
           id="start-trim-btn"
           class="btn-primary w-full flex items-center justify-center gap-2 text-sm"
@@ -262,27 +273,31 @@
 import { computed } from 'vue'
 import { useTrimStore } from '../stores/trimStore'
 import JobStatus from './JobStatus.vue'
+import HoopCalibrator from './HoopCalibrator.vue'
 
 const store = useTrimStore()
 
 const presets = [
-  { key: 'conservative', label: 'Conservative' },
-  { key: 'balanced', label: 'Balanced' },
-  { key: 'aggressive', label: 'Aggressive' },
+  { key: 'tight', label: 'Tight' },
+  { key: 'standard', label: 'Standard' },
+  { key: 'wide', label: 'Wide' },
+  { key: 'scores_only', label: 'Scores Only' },
 ]
 
 const activePreset = computed(() => {
   const p = store.params
   const presetValues = {
-    conservative: { activity_threshold: 0.01, min_segment_duration: 1.5, buffer_seconds: 2.0 },
-    balanced: { activity_threshold: 0.015, min_segment_duration: 2.0, buffer_seconds: 1.5 },
-    aggressive: { activity_threshold: 0.03, min_segment_duration: 3.0, buffer_seconds: 1.0 },
+    tight: { pre_roll_seconds: 2.0, post_roll_seconds: 1.0, min_segment_duration: 1.0, include_near_misses: true },
+    standard: { pre_roll_seconds: 3.0, post_roll_seconds: 2.0, min_segment_duration: 1.5, include_near_misses: true },
+    wide: { pre_roll_seconds: 5.0, post_roll_seconds: 3.0, min_segment_duration: 2.0, include_near_misses: true },
+    scores_only: { pre_roll_seconds: 3.0, post_roll_seconds: 2.0, min_segment_duration: 1.5, include_near_misses: false },
   }
   for (const [name, vals] of Object.entries(presetValues)) {
     if (
-      p.activity_threshold === vals.activity_threshold &&
+      p.pre_roll_seconds === vals.pre_roll_seconds &&
+      p.post_roll_seconds === vals.post_roll_seconds &&
       p.min_segment_duration === vals.min_segment_duration &&
-      p.buffer_seconds === vals.buffer_seconds
+      p.include_near_misses === vals.include_near_misses
     ) {
       return name
     }
@@ -292,6 +307,10 @@ const activePreset = computed(() => {
 
 function applyPreset(name) {
   store.applyPreset(name)
+}
+
+function onCalibrated(cal) {
+  store.setCalibration(cal)
 }
 
 function formatDuration(seconds) {
